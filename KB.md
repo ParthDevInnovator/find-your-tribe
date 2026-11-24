@@ -1,6 +1,6 @@
 # Find Your Tribe — Knowledge Base
 
-_As of 2026-11-23 · Parth Makwana_
+_As of 2026-11-25, 1:45 AM IST · Parth Makwana_
 
 Everything about the project in one place: product, rules, architecture, code, API, grouping logic, dashboard, how to run/deploy, status, risks and submission.
 Related files: [prd.md](prd.md) (spec) · [IMPLEMENTATION.md](IMPLEMENTATION.md) (technical plan) · [README.md](README.md) (run & deploy).
@@ -9,7 +9,7 @@ Related files: [prd.md](prd.md) (spec) · [IMPLEMENTATION.md](IMPLEMENTATION.md)
 
 ## 1. Overview
 
-Find Your Tribe is a mobile web app that turns a room of strangers into small groups of 3–4 people with shared interests, then gives each group a short in-person challenge. **Development is complete and tested locally.** What remains is deployment, real-world testing with about 30 people, and the sprint submission.
+Find Your Tribe is a mobile web app that turns a room of strangers into small groups of 3–4 people with shared interests, then gives each group a short in-person challenge. **Development is complete, and the app is live on Render with MongoDB Atlas.** What remains is real-world testing with about 25–30 people and the sprint submission.
 
 - **Tagline:** One QR. Five Questions. Your Tribe. Real Conversations.
 - **Problem:** People in a hostel common room want to meet each other, but nobody starts the first conversation, so everyone scrolls their phone instead.
@@ -22,6 +22,10 @@ Find Your Tribe is a mobile web app that turns a room of strangers into small gr
 | Submission | Public working link, 3-minute Loom video, half-page explanation |
 | Validation goal | About 30 real participants across 3–4 small groups |
 | Mandatory attribution | "Built by Parth Makwana for the goSTOPS Build Sprint. Not an official goSTOPS product." |
+| **Live app** | **https://find-your-tribe-t4ih.onrender.com** |
+| Rehearsal rooms | https://find-your-tribe-t4ih.onrender.com/?test=1 (excluded from `/stats`) |
+| Results dashboard | https://find-your-tribe-t4ih.onrender.com/stats |
+| Code | https://github.com/ParthDevInnovator/find-your-tribe (branch `main`; every push auto-deploys) |
 | Project folder | `C:\Users\PARTH\Match` |
 
 ---
@@ -58,7 +62,7 @@ EVERY PARTICIPANT
 | Join `/r/:code` | Nickname + avatar (no signup) |
 | Questions | 5 questions, one per screen, big emoji cards, auto-advance, back button |
 | Waiting room | "8 explorers have joined!" + how many still answering |
-| Tribe reveal | Full-screen team color, confetti, team name, teammates, "what connects you", mission: find your teammates |
+| Tribe reveal | Full-screen team color, confetti, team name, teammates, "what connects you", mission: find your teammates. A button pinned to the bottom, **"We found each other! Show our challenge →"**, with the line "🎯 Next: a 3-minute tribe challenge to do together", opens the challenge. Each person taps it |
 | Challenge | Challenge card + 3-minute timer; "We did it!" (one tap marks the whole team done) |
 | Final summary | Team, teammates, what connects you, conversation starter |
 | Feedback | 2 questions |
@@ -177,7 +181,7 @@ One Node.js service serves the React pages, the REST API and live updates from a
 |---|---|
 | `shared/gameData.js` | Questions with option tags, team names and phrases; avatars; team colors; 10 challenges; conversation starters; attribution text |
 | `server/index.js` | Express app, rate limit, serves `client/dist`, Socket.IO setup, error handler |
-| `server/db.js` | MongoDB connection; in-memory MongoDB fallback in development |
+| `server/db.js` | MongoDB connection; cleans up copy-paste mistakes in `MONGO_URI` (quotes, spaces, a `MONGO_URI=` prefix); 15 s connect timeout; logs the URI with the password hidden on failure; in-memory MongoDB fallback in development |
 | `server/models.js` | Room, Participant, Team schemas |
 | `server/routes.js` | All REST endpoints, host and participant token checks, late-joiner placement, stats |
 | `server/realtime.js` | Live room counts and socket broadcasts |
@@ -346,6 +350,49 @@ node scripts/smoke.mjs      # full game through the API, against a running serve
 
 ⚠️ The free Render plan sleeps after 15 idle minutes and then takes about 30–60 seconds to wake. Open the site a minute before every session, or use the $7 plan for the sprint.
 
+### Current deployment
+
+| Item | Value |
+|---|---|
+| Render service | `find-your-tribe-t4ih` (free plan, created from the Blueprint) |
+| URL | https://find-your-tribe-t4ih.onrender.com |
+| Database | MongoDB Atlas, Project 0, database `findyourtribe` |
+| Atlas network access | `0.0.0.0/0` (required, because Render's IP addresses change) |
+| Environment on Render | `NODE_ENV=production`, `NODE_VERSION=22`, `MONGO_URI` |
+| Local `.env` | Holds the same `MONGO_URI`; git ignores it and it is never committed |
+| Healthy startup log | `[db] connected` then `[server] Find Your Tribe running on http://localhost:10000` |
+
+`MONGO_URI` must end in `/findyourtribe?ssl=true&replicaSet=...&authSource=admin`. Without a database name, Atlas puts the data in a database called `test`.
+
+🔐 The database password was shared in a chat during setup. Change it in Atlas → Database Access after the sprint, then update `.env` and `MONGO_URI` on Render.
+
+### Why Render
+
+The app needs a public HTTPS link for the QR code and the submission, and a server that keeps WebSocket connections open. Atlas only stores data; it doesn't run the app.
+
+| Option | Verdict |
+|---|---|
+| Render | ✅ Free, supports WebSockets, `render.yaml` is ready. Sleeps when idle |
+| Railway / Fly.io | Fine alternatives; free credit is limited |
+| Vercel / Netlify | ❌ Serverless functions can't hold WebSockets |
+| Laptop + ngrok / cloudflared | Emergency backup only; the laptop must stay on and the URL may change |
+
+### Keeping the free plan awake
+
+- **Free:** a cron-job.org or UptimeRobot job that calls `https://find-your-tribe-t4ih.onrender.com/api/health` every 10 minutes. The 750 free hours a month cover one always-on service.
+- **Paid:** Render Starter, about $7 a month.
+- **Otherwise:** open the site 1–2 minutes before each session. The "Service waking up" screen is normal and clears in about 30–60 seconds.
+
+### Deployment troubleshooting log
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `MongoParseError: Invalid scheme, expected connection string to start with "mongodb://"` | `MONGO_URI` on Render was pasted with extra characters | Paste only the bare string; `db.js` now also cleans up quotes, spaces and a `MONGO_URI=` prefix (commit `8ced117`) |
+| "Service waking up" loops forever | Wrong URL: `find-your-tribe.onrender.com` belongs to someone else | Use `find-your-tribe-t4ih.onrender.com`, shown at the end of the deploy log ("Available at your primary URL") |
+| Waking screen for 30–60 s, then the app loads | Normal free-plan cold start | See "Keeping the free plan awake" |
+| `MongoServerSelectionError` / timeout | Atlas blocks Render's IP addresses | Network Access → add `0.0.0.0/0` |
+| `bad auth` | Wrong username or password in the string | Re-copy from Atlas → Connect → Drivers |
+
 ### Environment variables
 
 ```
@@ -358,7 +405,7 @@ NODE_ENV=production
 
 ## 10. Build status and phases
 
-Phases 0–7 are done as of Nov 23. Deployment, field testing and submission remain before the deadline on **Nov 25, 2026, 10:00 PM**.
+Phases 0–8 are done as of Nov 25, 1:45 AM. Field testing and submission remain before the deadline on **Nov 25, 2026, 10:00 PM**.
 
 ### Verified so far
 
@@ -368,6 +415,9 @@ Phases 0–7 are done as of Nov 23. Deployment, field testing and submission rem
 | API smoke test (10 players + 1 late joiner) | Pass: teams of 4, 3, 3; late joiner placed; counts correct; test room excluded from stats |
 | Browser test on a phone-sized screen (headless Edge) | Pass: join, questions, waiting, host forms tribes, reveal, challenge, summary, refresh resumes, feedback, done, stats, unknown room. No browser errors |
 | Client bundle size | 85 KB gzipped JavaScript, 6 KB CSS |
+| Smoke test against Atlas from a laptop | Pass |
+| Smoke test against the live Render URL | Pass (Nov 25, ~1:15 AM) |
+| First live game with 3 players | Data saved correctly in Atlas and shown on `/stats` (see section 12) |
 
 ### Phases
 
@@ -381,11 +431,17 @@ Phases 0–7 are done as of Nov 23. Deployment, field testing and submission rem
 | 5 | Challenge, summary, feedback | ✅ Done | |
 | 6 | Dashboard and production build | ✅ Done | Deployment itself still open |
 | 7 | Polish and edge cases | ✅ Done | Late joiners, rate limit, input limits |
-| 8 | Deploy to Render with Atlas | ⬜ Not started | Needs the owner's Atlas, GitHub and Render accounts |
-| 9 | Real-world testing, about 30 people | ⬜ Not started | |
-| 10 | Loom video, write-up, submit | ⬜ Not started | Before 10:00 PM on Nov 25 |
+| 8 | Deploy to Render with Atlas | ✅ Done | Live at https://find-your-tribe-t4ih.onrender.com |
+| 9 | Real-world testing, 25–30 people | 🟡 Started | 3-player pilot done; real sessions today |
+| 10 | Loom video, write-up, submit | ⬜ Not started | Start by about 6 PM; submit before 10:00 PM on Nov 25 |
 
-A git repository is initialised in the project folder, but no code has been committed yet.
+### Commits
+
+| Commit | Change |
+|---|---|
+| `dc4a98f` | Initial commit: Find Your Tribe MVP |
+| `8ced117` | Clean up `MONGO_URI` copy-paste mistakes; log the URI with the password hidden when the connection fails |
+| `bf0f07c` | Reveal screen: pinned "Show our challenge" button and a "Next: challenge" hint, because players missed the way into the challenge |
 
 ---
 
@@ -408,6 +464,7 @@ The biggest remaining risks are a sleeping server at the start of a session and 
 
 - [ ] Pick 3–4 spots: college hostel, PG common room, canteen, café
 - [ ] Wake the server and create a fresh, **non-test** room on the host phone
+- [ ] Tell players to tap **"We found each other! Show our challenge →"** after the reveal, and to finish the feedback screen
 - [ ] Show the QR code; aim for 6–10 people per session
 - [ ] Watch whether people understand it, finish the questions, find teammates, start talking, enjoy the challenge, and keep talking afterwards
 - [ ] With consent, record short clips for the Loom
@@ -422,6 +479,56 @@ The biggest remaining risks are a sleeping server at the start of a session and 
 - [ ] Attribution visible on every page
 - [ ] Results show real data only
 - [ ] Submitted before **10:00 PM on Nov 25, 2026**
+
+---
+
+## 12. Players, targets and results so far
+
+### How many people a game needs
+
+- **To start:** at least **2 people who have finished all 5 questions**. Until then the **Form the tribes** button stays disabled ("Needs at least 2 people who finished the questions."). The server checks this too (`server/routes.js`).
+- Only people who **finished** the questions count. Anyone still answering when the host starts is added to a team once they finish.
+- The host screen isn't a player. To play as well, the host scans the QR code with a second phone.
+- **To show the matching:** at least **6 people**. With 2–5 everyone ends up in one team, so the interest matching never shows. Sessions of 6–10 give 2–3 teams.
+
+| People | Teams |
+|---|---|
+| 2–5 | 1 team |
+| 6 | 3 + 3 |
+| 7 | 4 + 3 |
+| 8 | 4 + 4 |
+| 9–12 | 3 teams of 3–4 |
+
+### Participant targets for the submission
+
+| Level | Real participants | Sessions | What it shows |
+|---|---|---|---|
+| Bare minimum | 15–20 | 3 | It works with real people more than once |
+| **Good target** | **25–30** | 3–4 | Matches the plan; feedback percentages mean something |
+| Great | 40+ | 5+ | Strong, but unrealistic before tonight |
+
+What matters more than the total:
+- At least **6 people per session**, so that 2 or more teams form.
+- At least **3 separate sessions in different places**, such as a hostel, canteen and café.
+- **Feedback from most players.** "X of Y talked to someone new" is the headline result.
+- **Real strangers**, or people who don't usually hang out together.
+
+**Plan for Nov 25:** 3 sessions of about 8 people (about 24 in total), finished by about 6 PM. That leaves 4 hours for the Loom and the write-up. If fewer than 15 people take part, submit anyway with honest numbers.
+
+### Results log
+
+| Room | When | Type | Players | Teams | Challenge | Feedback |
+|---|---|---|---|---|---|---|
+| `WGD55` | Nov 25, 1:25 AM | Pilot (counts as real) | 3: Mouse, Nice, Tortoise | 1: 🏖️ Sunset Squad | Completed | 2 of 3. Talked to someone new: 2 yes. Would repeat: 1 maybe, 1 no |
+| `TQME6`, `WBEK9` | Nov 25, ~1 AM | Automated smoke tests (`isTest`) | 11 each | 3 each | Completed | Excluded from `/stats` |
+
+`/stats` after the pilot: 1 room played, 3 participants, 3 answered, 1 team, 1 challenge completed, 2 feedback responses, 2 talked to someone new, would repeat 0 yes / 1 maybe / 1 no.
+
+**Open decisions and lessons**
+- **Pilot `WGD55`:** keep it if the 3 were real people; delete it before the sessions if it was one person on several phones.
+- **Lesson 1:** players missed the way into the challenge on the reveal screen. Fixed in `bf0f07c`.
+- **Lesson 2:** one player skipped feedback. Ask everyone to finish the last screen.
+- **Follow-up:** one player answered "no" to repeating. Ask them why; the answer is useful for the write-up.
 
 ---
 
