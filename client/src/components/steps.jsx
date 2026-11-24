@@ -217,9 +217,15 @@ export function RevealStep({ me, act, error }) {
         </div>
 
         <ErrorNote>{error}</ErrorNote>
-        <Button variant="white" className="mt-6" loading={busy} onClick={async () => { setBusy(true); if (!(await act('/me/challenge/start'))) setBusy(false); }}>
-          We found each other! →
-        </Button>
+        {/* Sticky so the way into the challenge is always visible, even on short phones. */}
+        <div className="sticky bottom-0 -mx-1 mt-6 px-1 pb-3 pt-3" style={{ background: `linear-gradient(to bottom, transparent, ${team.color} 35%)` }}>
+          <p className="mb-2 text-center font-display text-base font-bold text-white">
+            🎯 Next: a 3-minute tribe challenge to do together
+          </p>
+          <Button variant="white" className="w-full" loading={busy} onClick={async () => { setBusy(true); if (!(await act('/me/challenge/start'))) setBusy(false); }}>
+            We found each other! Show our challenge →
+          </Button>
+        </div>
       </div>
     </Screen>
   );
